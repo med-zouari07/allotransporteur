@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  drupal:
+    image: drupal:10.2-php8.2-apache
+    container_name: drupal
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    volumes:
+      - drupal_modules:/var/www/html/modules
+      - drupal_profiles:/var/www/html/profiles
+      - drupal_themes:/var/www/html/themes
+      - drupal_sites:/var/www/html/sites
+    environment:
+      - DRUPAL_DATABASE_HOST=database
+      - DRUPAL_DATABASE_NAME=${DB_NAME}
+      - DRUPAL_DATABASE_USERNAME=${DB_USER}
+      - DRUPAL_DATABASE_PASSWORD=${DB_PASSWORD}
+      - DRUPAL_HASH_SALT=${DRUPAL_HASH_SALT}
+      - TZ=Africa/Tunis
+    working_dir: /var/www/html
+    command: >
+      sh -c "apt-get update &&
+      apt-get install -y curl unzip &&
+      curl -sS https://getcomposer.org/installer | php &&
+      mv composer.phar /usr/local/bin/composer &&
+      composer global require drush/drush &&
+      export PATH=\"/root/.composer/vendor/bin:$PATH\" &&
+      apache2-foreground"
+    restart: unless-stopped
+    networks:
+      - freight_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  database:
+    image: postgres:15-alpine
+    container_name: drupal-postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_HOST_AUTH_METHOD=md5
+      - TZ=Africa/Tunis
+    restart: unless-stopped
+    networks:
+      - freight_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  drupal_modules:
+  drupal_profiles:
+  drupal_themes:
+  drupal_sites:
+  postgres_data:
+
+networks:
+  freight_network:
+    driver: bridge
+
